@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Nexus OS v1</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root { --glass: rgba(15, 23, 42, 0.85); --accent: #3b82f6; }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background: #02040a; color: white; overflow: hidden; height: 100vh; margin: 0; }
+        canvas#stars { position: fixed; inset: 0; z-index: -1; }
+        
+        .window { position: absolute; background: var(--glass); backdrop-filter: blur(25px); border-radius: 18px; border: 1px solid rgba(255,255,255,0.1); display: none; flex-direction: column; min-width: 320px; box-shadow: 0 25px 50px rgba(0,0,0,0.5); z-index: 10; overflow: hidden; }
+        .win-head { padding: 12px; background: rgba(255,255,255,0.05); cursor: move; display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; font-weight: bold; }
+        .win-body { flex: 1; overflow: auto; padding: 15px; }
+        
+        .taskbar { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); width: 95%; max-width: 1100px; height: 65px; background: var(--glass); backdrop-filter: blur(20px); border-radius: 22px; border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; padding: 0 15px; gap: 10px; z-index: 1000; }
+        .app-icon { width: 45px; height: 45px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; transition: 0.3s; background: rgba(255,255,255,0.05); }
+        .app-icon:hover { transform: scale(1.1) translateY(-5px); background: var(--accent); }
+        
+        .start-menu { position: fixed; bottom: 85px; left: 50%; transform: translateX(-50%) translateY(20px); width: 420px; background: var(--glass); backdrop-filter: blur(30px); border-radius: 25px; border: 1px solid rgba(255,255,255,0.1); padding: 20px; opacity: 0; visibility: hidden; transition: 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 999; }
+        .start-menu.open { opacity: 1; visibility: visible; transform: translateX(-50%) translateY(0); }
+
+        .rgb-mode { animation: rgb-glow 5s infinite linear; border-color: #f00 !important; }
+        @keyframes rgb-glow { 0% { border-color: #f00; } 33% { border-color: #0f0; } 66% { border-color: #00f; } 100% { border-color: #f00; } }
+
+        #snake-canvas { background: #000; border: 1px solid #333; margin: auto; }
+        .ttt-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; width: 180px; margin: auto; }
+        .ttt-cell { width: 60px; height: 60px; background: rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <canvas id="stars"></canvas>
+
+    <!-- BUREAU ICONES -->
+    <div class="p-8 grid grid-cols-1 gap-8 w-fit">
+        <div onclick="openWin('files')" class="flex flex-col items-center cursor-pointer group">
+            <div class="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-3xl group-hover:bg-blue-600 transition">📂</div>
+            <span class="text-[10px] mt-2 font-bold uppercase tracking-wider">Fichiers</span>
+        </div>
+        <div onclick="openWin('notes')" class="flex flex-col items-center cursor-pointer group">
+            <div class="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-3xl group-hover:bg-yellow-500 transition">📝</div>
+            <span class="text-[10px] mt-2 font-bold uppercase tracking-wider">Notes</span>
+        </div>
+        <div onclick="openWin('monitor')" class="flex flex-col items-center cursor-pointer group">
+            <div class="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-3xl group-hover:bg-orange-600 transition">📊</div>
+            <span class="text-[10px] mt-2 font-bold uppercase tracking-wider">Système</span>
+        </div>
+        <div onclick="openWin('games')" class="flex flex-col items-center cursor-pointer group">
+            <div class="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-3xl group-hover:bg-purple-600 transition">🎮</div>
+            <span class="text-[10px] mt-2 font-bold uppercase tracking-wider">Jeux</span>
+        </div>
+    </div>
+
+    <!-- FENETRES -->
+    <div id="win-files" class="window w-[550px] h-[400px]" style="top:10%; left:20%;">
+        <div class="win-head" onmousedown="drag(this.parentElement)"><span>📂 Explorateur</span><button onclick="closeWin('files')">✕</button></div>
+        <div id="file-list" class="win-body text-sm"></div>
+    </div>
+
+    <div id="win-notes" class="window w-[500px] h-[450px]" style="top:15%; left:25%;">
+        <div class="win-head" onmousedown="drag(this.parentElement)"><span>📝 Nexus Notes</span><button onclick="closeWin('notes')">✕</button></div>
+        <div class="flex h-full overflow-hidden">
+            <div class="w-1/3 border-r border-white/10 p-2 overflow-y-auto text-[10px] space-y-1" id="notes-list"></div>
+            <div class="w-2/3 flex flex-col p-4">
+                <input id="note-title" placeholder="Titre.txt" class="bg-transparent border-b border-white/10 mb-4 p-1 outline-none text-sm">
+                <textarea id="note-content" class="flex-1 bg-white/5 p-3 rounded-lg outline-none text-xs resize-none" placeholder="Contenu..."></textarea>
+                <button onclick="saveNote()" class="mt-4 bg-blue-600 p-2 rounded-lg text-xs font-bold">SAUVEGARDER</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="win-monitor" class="window w-[320px]" style="top:10%; left:65%;">
+        <div class="win-head" onmousedown="drag(this.parentElement)"><span>📊 Système</span><button onclick="closeWin('monitor')">✕</button></div>
+        <div class="win-body space-y-6">
+            <div><div class="flex justify-between text-[10px] mb-2 uppercase opacity-60"><span>CPU</span><span id="cpu-val">0%</span></div>
+            <div class="w-full bg-white/10 h-1.5 rounded-full"><div id="cpu-bar" class="bg-blue-500 h-full rounded-full transition-all duration-500" style="width: 0%"></div></div></div>
+            <div><div class="flex justify-between text-[10px] mb-2 uppercase opacity-60"><span>RAM</span><span id="ram-val">0%</span></div>
+            <div class="w-full bg-white/10 h-1.5 rounded-full"><div id="ram-bar" class="bg-purple-500 h-full rounded-full transition-all duration-500" style="width: 0%"></div></div></div>
+        </div>
+    </div>
+
+    <div id="win-games" class="window w-[350px]" style="top:30%; left:40%;">
+        <div class="win-head" onmousedown="drag(this.parentElement)"><span>🎮 Arcade</span><button onclick="closeWin('games')">✕</button></div>
+        <div class="win-body space-y-4">
+            <div class="flex justify-center gap-2"><button onclick="initSnake()" class="bg-green-600 px-4 py-1 rounded-full text-[10px] font-bold">SNAKE</button><button onclick="initTTT()" class="bg-blue-600 px-4 py-1 rounded-full text-[10px] font-bold">MORPION</button></div>
+            <div id="game-area" class="flex justify-center"><canvas id="snake-canvas" width="240" height="240" style="display:none"></canvas><div id="ttt-board" class="ttt-grid" style="display:none"></div></div>
+        </div>
+    </div>
+
+    <div id="win-add" class="window w-[350px]" style="top:30%; left:35%;">
+        <div class="win-head" onmousedown="drag(this.parentElement)"><span>➕ Nouveau Service</span><button onclick="closeWin('add')">✕</button></div>
+        <div class="win-body space-y-3">
+            <input id="add-name" placeholder="Nom" class="w-full bg-white/5 p-2 rounded outline-none border border-white/10 text-sm">
+            <input id="add-url" placeholder="URL (https://...)" class="w-full bg-white/5 p-2 rounded outline-none border border-white/10 text-sm">
+            <input id="add-emoji" placeholder="Emoji" class="w-full bg-white/5 p-2 rounded outline-none border border-white/10 text-sm">
+            <button onclick="saveService()" class="w-full bg-blue-600 p-2 rounded font-bold text-sm">AJOUTER</button>
+        </div>
+    </div>
+
+    <div id="win-settings" class="window w-[300px]" style="top:20%; left:60%;">
+        <div class="win-head" onmousedown="drag(this.parentElement)"><span>⚙️ Settings</span><button onclick="closeWin('settings')">✕</button></div>
+        <div class="win-body space-y-4 text-xs">
+            <div class="flex justify-between items-center"><span>Mode RGB</span><input type="checkbox" id="rgb-opt" onchange="applyOS()"></div>
+            <div class="flex justify-between items-center"><span>Vitesse Étoiles</span><input type="range" id="star-speed" min="0" max="10" value="1"></div>
+            <button onclick="localStorage.clear(); location.reload();" class="w-full p-2 bg-red-900/20 text-red-500 rounded font-bold">RESET</button>
+        </div>
+    </div>
+
+    <!-- TASKBAR -->
+    <div class="taskbar" id="main-taskbar">
+        <div onclick="toggleStart()" class="app-icon bg-blue-600 shadow-lg">🌌</div>
+        <div id="pinned-apps" class="flex gap-2"></div>
+        <div class="ml-auto text-right font-mono pr-2">
+            <div id="clock-t" class="text-sm font-bold">00:00</div>
+            <div id="clock-d" class="text-[9px] opacity-40 uppercase">--/--</div>
+        </div>
+    </div>
+
+    <!-- START MENU -->
+    <div id="start-menu" class="start-menu">
+        <div class="flex justify-between items-center mb-4 border-b border-white/5 pb-2 uppercase text-[10px] font-bold opacity-50">Services</div>
+        <div id="start-services-list" class="space-y-1 max-h-[250px] overflow-y-auto pr-2 mb-4"></div>
+        <div class="border-t border-white/5 pt-4 flex justify-between">
+            <button onclick="openWin('add')" class="bg-blue-600 px-3 py-1 rounded text-[10px] font-bold">AJOUTER +</button>
+            <button onclick="openWin('settings')" class="text-xs">⚙️ Settings</button>
+        </div>
+    </div>
+
+    <script>
+        // --- CORE ---
+        function drag(el) { el.onmousedown = e => { if(e.target.tagName==='BUTTON'||e.target.tagName==='INPUT')return; let ox=e.clientX-el.offsetLeft, oy=e.clientY-el.offsetTop; document.onmousemove=e=>{el.style.left=e.clientX-ox+'px'; el.style.top=e.clientY-oy+'px';}; document.onmouseup=()=>document.onmousemove=null; document.querySelectorAll('.window').forEach(w=>w.style.zIndex=10); el.style.zIndex=100; }; }
+        function openWin(id) { document.getElementById('win-'+id).style.display='flex'; if(id==='files') loadFiles(''); if(id==='notes') loadNotesList(); toggleStart(false); }
+        function closeWin(id) { document.getElementById('win-'+id).style.display='none'; }
+        function toggleStart(f) { const m=document.getElementById('start-menu'); f===false?m.classList.remove('open'):m.classList.toggle('open'); }
+
+        // --- SERVICES ---
+        let services = JSON.parse(localStorage.getItem('nx9_services')) || [
+            { id: 1, name: "FakeButton", url: "Notrealbutton", emoji: "🟢", pinned: true },
+            { id: 2, name: "FakeButton", url: "FakeButton", emoji: "💻", pinned: true }
+        ];
+
+        function saveService() {
+            const n=document.getElementById('add-name').value, u=document.getElementById('add-url').value, e=document.getElementById('add-emoji').value||"🔗";
+            if(n && u) { services.push({id:Date.now(), name:n, url:u, emoji:e, pinned:true}); localStorage.setItem('nx9_services', JSON.stringify(services)); renderServices(); closeWin('add'); }
+        }
+        function deleteService(id) { services=services.filter(s=>s.id!==id); localStorage.setItem('nx9_services', JSON.stringify(services)); renderServices(); }
+        function renderServices() {
+            const sl=document.getElementById('start-services-list'), pl=document.getElementById('pinned-apps');
+            sl.innerHTML=''; pl.innerHTML='';
+            services.forEach(s => {
+                sl.innerHTML += `<div class="flex justify-between items-center p-2 hover:bg-white/5 rounded-lg group text-xs"><div onclick="window.open('${s.url}')" class="cursor-pointer"><span>${s.emoji}</span> ${s.name}</div><button onclick="deleteService(${s.id})" class="text-red-500 opacity-0 group-hover:opacity-100">✕</button></div>`;
+                if(s.pinned) { let b=document.createElement('div'); b.className="app-icon"; b.innerHTML=s.emoji; b.title=s.name; b.onclick=()=>window.open(s.url); pl.appendChild(b); }
+            });
+        }
+
+        // --- MONITOR & FILES & NOTES ---
+        function updateStats() { fetch('/api/stats').then(r=>r.json()).then(data=>{ document.getElementById('cpu-val').innerText=data.cpu+'%'; document.getElementById('cpu-bar').style.width=data.cpu+'%'; document.getElementById('ram-val').innerText=data.ram+'%'; document.getElementById('ram-bar').style.width=data.ram+'%'; }).catch(()=>{}); }
+        setInterval(updateStats, 2000);
+
+        async function loadFiles(p) {
+            const l=document.getElementById('file-list'); l.innerHTML="Chargement...";
+            const res=await fetch(`/api/files/${p}`); const data=await res.json();
+            l.innerHTML = p?`<div class="p-2 text-blue-400 cursor-pointer" onclick="loadFiles('')">⬅ Retour</div>`:'';
+            data.items.forEach(i=>{ let d=document.createElement('div'); d.className="p-2 hover:bg-white/5 cursor-pointer rounded flex items-center gap-2"; d.innerHTML=`<span>${i.isDir?'📁':'📄'}</span> ${i.name}`; if(i.isDir) d.onclick=()=>loadFiles(i.path); l.appendChild(d); });
+        }
+
+        async function loadNotesList() {
+            const res=await fetch('/api/notes'); const data=await res.json();
+            const l=document.getElementById('notes-list'); l.innerHTML='';
+            data.notes.forEach(n=>{ let d=document.createElement('div'); d.className="p-2 hover:bg-white/10 cursor-pointer rounded"; d.innerText="📄 "+n; d.onclick=()=>loadNoteContent(n); l.appendChild(d); });
+        }
+        async function loadNoteContent(n) { const res=await fetch(`/api/notes/${n}`); const data=await res.json(); document.getElementById('note-title').value=n; document.getElementById('note-content').value=data.content; }
+        async function saveNote() { const f=document.getElementById('note-title').value, c=document.getElementById('note-content').value; await fetch('/api/notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:f,content:c})}); loadNotesList(); }
+
+        // --- ARCADE ---
+        let snItv;
+        function initSnake() {
+            document.getElementById('ttt-board').style.display='none'; const c=document.getElementById('snake-canvas'); c.style.display='block'; const ctx=c.getContext('2d');
+            let s=[{x:10,y:10}], f={x:5,y:5}, d={x:1,y:0}; clearInterval(snItv);
+            document.onkeydown=e=>{ if(e.key==='ArrowUp'&&d.y===0)d={x:0,y:-1}; if(e.key==='ArrowDown'&&d.y===0)d={x:0,y:1}; if(e.key==='ArrowLeft'&&d.x===0)d={x:-1,y:0}; if(e.key==='ArrowRight'&&d.x===0)d={x:1,y:0}; };
+            snItv=setInterval(()=>{ let h={x:s[0].x+d.x, y:s[0].y+d.y}; if(h.x<0||h.x>=20||h.y<0||h.y>=20)return clearInterval(snItv); s.unshift(h); if(h.x===f.x&&h.y===f.y)f={x:Math.floor(Math.random()*20), y:Math.floor(Math.random()*20)}; else s.pop(); ctx.fillStyle='black'; ctx.fillRect(0,0,240,240); ctx.fillStyle='red'; ctx.fillRect(f.x*12,f.y*12,10,10); ctx.fillStyle='#3b82f6'; s.forEach(p=>ctx.fillRect(p.x*12,p.y*12,10,10)); },100);
+        }
+        function initTTT() { clearInterval(snItv); document.getElementById('snake-canvas').style.display='none'; const b=document.getElementById('ttt-board'); b.style.display='grid'; b.innerHTML=''; let cells=Array(9).fill(null); for(let i=0;i<9;i++){ let d=document.createElement('div'); d.className='ttt-cell'; d.onclick=()=>{if(!cells[i]){cells[i]='X'; d.innerText='X'; let e=cells.map((v,j)=>v===null?j:null).filter(v=>v!==null); if(e.length){let m=e[0]; cells[m]='O'; b.children[m].innerText='O';}}}; b.appendChild(d); } }
+
+        // --- UI ---
+        function applyOS() { const rgb=document.getElementById('rgb-opt').checked; const t=[document.getElementById('main-taskbar'), document.getElementById('start-menu'), ...document.querySelectorAll('.window')]; t.forEach(el=>rgb?el.classList.add('rgb-mode'):el.classList.remove('rgb-mode')); }
+        setInterval(()=>{ const n=new Date(); document.getElementById('clock-t').innerText=n.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}); document.getElementById('clock-d').innerText=n.toLocaleDateString('fr-FR',{day:'2-digit',month:'short'}); },1000);
+        const sc=document.getElementById('stars'), sx=sc.getContext('2d'); let stArr=Array(150).fill(0).map(()=>({x:Math.random()*2000,y:Math.random()*2000,s:Math.random()*2}));
+        function anim() { sc.width=window.innerWidth; sc.height=window.innerHeight; sx.clearRect(0,0,sc.width,sc.height); sx.fillStyle='white'; let sp=parseFloat(document.getElementById('star-speed').value); stArr.forEach(s=>{sx.beginPath(); sx.arc(s.x,s.y,s.s,0,7); sx.fill(); s.y-=sp; if(s.y<0)s.y=sc.height;}); requestAnimationFrame(anim); }
+        renderServices(); anim();
+    </script>
+</body>
+</html>

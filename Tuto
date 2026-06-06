@@ -1,0 +1,2 @@
+download node js:https://nodejs.org/en/download
+run the installer when thats good go to Nexus WebOS folder lauch "start.bat" and the go to your brower and tape "localhost:8080" and for the other device on your network tape "(your ip):8080"
